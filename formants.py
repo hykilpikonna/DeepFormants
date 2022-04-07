@@ -11,17 +11,18 @@ def predict_from_times(wav_filename, preds_filename, begin, end, csv_export=True
     print("Input Array Path: " +  tmp_features_filename)
 
     predictions = None
-    if begin > 0.0 or end > 0.0:
-        print(wav_filename + " interval " + str(begin) + "-" + str(end) + ":")
-        features.create_features(wav_filename, tmp_features_filename, begin, end)
-        predictions = load_estimation_model(tmp_features_filename, preds_filename, begin, end, csv_export=csv_export)
+    # if begin > 0.0 or end > 0.0:
+    print(wav_filename + " interval " + str(begin) + "-" + str(end) + ":")
+    features.create_features(wav_filename, tmp_features_filename, begin, end)
+    predictions = load_estimation_model(tmp_features_filename, preds_filename, begin, end, csv_export=csv_export)
         #easy_call("luajit load_estimation_model.lua " + tmp_features_filename + ' ' + preds_filename)
-    else:
-        features.create_features(wav_filename, tmp_features_filename)
-        easy_call("luajit load_tracking_model.lua " + tmp_features_filename + ' ' + preds_filename)
+    # else:
+    #     features.create_features(wav_filename, tmp_features_filename)
+    #     easy_call("luajit load_tracking_model.lua " + tmp_features_filename + ' ' + preds_filename)
     
     delete_temp_files()
     return predictions
+
 
 def predict_from_textgrid(wav_filename, preds_filename, textgrid_filename, textgrid_tier):
     print(wav_filename)
@@ -37,13 +38,13 @@ def predict_from_textgrid(wav_filename, preds_filename, textgrid_filename, textg
     # extract tier names
     tier_names = textgrid.tierNames()
 
-    
+
     if textgrid_tier in tier_names: # run over all intervals in the tier
         tier_index = tier_names.index(textgrid_tier)
         textgrid_tier = textgrid[tier_index]
     else: # process first tier
         textgrid_tier = textgrid[0]
-    
+
     for interval in textgrid_tier:
         if re.search(r'\S', interval.mark()):
             tmp_features_filename = generate_tmp_filename("features")

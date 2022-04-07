@@ -5,6 +5,8 @@ import numpy as np
 import wave
 import os
 import math
+
+from inaSpeechSegmenter.features import to_wav
 from scipy.fftpack.realtransforms import dct
 from scipy.signal import lfilter, hamming
 from scipy.fftpack import fft, ifft
@@ -16,8 +18,8 @@ epsilon = 0.0000000001
 prefac = .97
 
 
-def build_data(wav,begin=None,end=None):
-    wav_in_file = wave.Wave_read(wav)
+def build_data(wav, begin=None,end=None):
+    wav_in_file = wave.Wave_read(str(wav))
     wav_in_num_samples = wav_in_file.getnframes()
     N = wav_in_file.getnframes()
     dstr = wav_in_file.readframes(N)
@@ -264,14 +266,13 @@ def build_single_feature_row(data, Atal):
 
 
 def create_features(input_wav_filename, feature_filename, begin=None, end=None, Atal=False):
-    tmp_wav16_filename = generate_tmp_filename("wav")
-    easy_call("sox " + input_wav_filename + " -c 1 -r 16000 " + tmp_wav16_filename)
-    X = build_data(tmp_wav16_filename, begin, end)
+    wav = to_wav(input_wav_filename)
+    X = build_data(wav, begin, end)
     if begin is not None and end is not None:
         arr = [input_wav_filename]
         arr.extend(build_single_feature_row(X, Atal))
         np.savetxt(feature_filename, np.asarray([arr]), delimiter=",", fmt="%s")
-        os.remove(tmp_wav16_filename)
+        os.remove(wav)
         return arr
     arcep_mat = []
     for i in range(len(X)):
@@ -280,7 +281,7 @@ def create_features(input_wav_filename, feature_filename, begin=None, end=None, 
         arcep_mat.append(arr)
     np.savetxt(feature_filename, np.asarray(arcep_mat), delimiter=",", fmt="%s")
     
-    os.remove(tmp_wav16_filename)
+    os.remove(wav)
 
     return arcep_mat
 

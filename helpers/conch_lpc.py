@@ -27,20 +27,21 @@
 # THE SOFTWARE.
 
 #import librosa
+import librosa
 import numpy as np
 import scipy as sp
+from numba import njit
 from scipy.signal import lfilter
 
 from scipy.fftpack import fft, ifft
-from scipy.signal import gaussian
+from scipy.signal.windows import gaussian
 
-#from ..helper import nextpow2
-#from ..functions import BaseAnalysisFunction
 
-# Source: https://github.com/mmcauliffe/Conch-sounds/blob/master/conch/analysis/helper.py
-def nextpow2(x):
+@njit
+def next_pow_2(x: float) -> int:
     """Return the first integer N such that 2**N >= abs(x)"""
     return np.ceil(np.log2(np.abs(x)))
+
 
 def lpc_ref(signal, order):
     """Compute the Linear Prediction Coefficients.
@@ -175,7 +176,7 @@ def acorr_lpc(x, axis=-1):
         raise ValueError("Complex input not supported yet")
 
     maxlag = x.shape[axis]
-    nfft = int(2 ** nextpow2(2 * maxlag - 1))
+    nfft = int(2 ** next_pow_2(2 * maxlag - 1))
 
     if axis != -1:
         x = np.swapaxes(x, -1, axis)

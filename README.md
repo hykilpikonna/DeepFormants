@@ -1,9 +1,7 @@
-DeepFormants
-============
+# DeepFormants - PyTorch
 
 Shua Dissen (shua.dissen@gmail.com)            
-Joseph Keshet (joseph.keshet@biu.ac.il)  
-
+Joseph Keshet (joseph.keshet@biu.ac.il)
 
 DeepFormants is a software package for formant tracking and estimation, using two algorithms based on deep networks. It works as follows:
 * The user provides a wav file with an initial stop consonant. 
@@ -13,8 +11,6 @@ DeepFormants is a software package for formant tracking and estimation, using tw
 * Tracking: If no time window is given, the model will track F1-F4 and give a measurement at every 10 milliseconds across the length of the file.
 
 This is a beta version of DeepFormants. Any reports of bugs, comments on how to improve the software or documentation, or questions are greatly appreciated, and should be sent to the authors at the addresses given above.
-
----
 
 
 ## Installation instructions
