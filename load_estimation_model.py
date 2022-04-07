@@ -57,17 +57,9 @@ def load_estimation_model(inputfilename, outputfilename, begin, end, csv_export=
     model.load_state_dict(torch.load("em.pth"))
     my_prediction = model.forward(data)
 
-    prediction_dict = {}
-    prediction_dict["F1"] = 1000 * float(my_prediction[0][0])
-    prediction_dict["F2"] = 1000 * float(my_prediction[0][1])
-    prediction_dict["F3"] = 1000 * float(my_prediction[0][2])
-    prediction_dict["F4"] = 1000 * float(my_prediction[0][3])
-
-    if csv_export:
-        with open(outputfilename, "w") as wf:
-            wf.write("NAME,begin,end,F1,F2,F3,F4\n")
-            wf.write(name + "," + str(begin) + "," + str(end) + "," + \
-                     str(prediction_dict["F1"]) + "," + str(prediction_dict["F2"]) + "," + \
-                     str(prediction_dict["F3"]) + "," + str(prediction_dict["F4"]) + "\n")
+    prediction_dict = {"f1": 1000 * float(my_prediction[0][0]),
+                       "f2": 1000 * float(my_prediction[0][1]),
+                       "f3": 1000 * float(my_prediction[0][2]),
+                       "f4": 1000 * float(my_prediction[0][3])}
 
     return prediction_dict
