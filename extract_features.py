@@ -7,10 +7,11 @@ import os
 import math
 
 from inaSpeechSegmenter.features import to_wav
+from numba import float32
 from scipy.fftpack.realtransforms import dct
 from scipy.signal import lfilter, hamming
 from scipy.fftpack import fft, ifft
-#from scikits.talkbox.linpred import lpc  # obsolete
+# from scikits.talkbox.linpred import lpc  # obsolete
 from helpers.conch_lpc import lpc
 from helpers.utilities import *
 
@@ -18,18 +19,18 @@ epsilon = 0.0000000001
 prefac = .97
 
 
-def build_data(wav, begin=None,end=None):
+def build_data(wav, begin=None, end=None):
     wav_in_file = wave.Wave_read(str(wav))
     wav_in_num_samples = wav_in_file.getnframes()
     N = wav_in_file.getnframes()
     dstr = wav_in_file.readframes(N)
     data = np.fromstring(dstr, np.int16)
     if begin is not None and end is not None:
-        #return data[begin*16000:end*16000] #numpy 1.11.0
-        return data[np.int(begin*16000):np.int(end*16000)] #numpy 1.14.0
+        # return data[begin*16000:end*16000] #numpy 1.11.0
+        return data[np.int(begin * 16000):np.int(end * 16000)]  # numpy 1.14.0
     X = []
     l = len(data)
-    for i in range(0, l-100, 160):
+    for i in range(0, l - 100, 160):
         X.append(data[i:i + 480])
     return X
 
@@ -183,13 +184,13 @@ def atal(x, order, num_coefs):
     a, e, kk = lpc(x, order)
     c = np.zeros(num_coefs)
     c[0] = a[0]
-    for m in range(1, order+1):
+    for m in range(1, order + 1):
         c[m] = - a[m]
         for k in range(1, m):
-            c[m] += (float(k)/float(m)-1)*a[k]*c[m-k]
-    for m in range(order+1, num_coefs):
-        for k in range(1, order+1):
-            c[m] += (float(k)/float(m)-1)*a[k]*c[m-k]
+            c[m] += (float(k) / float(m) - 1) * a[k] * c[m - k]
+    for m in range(order + 1, num_coefs):
+        for k in range(1, order + 1):
+            c[m] += (float(k) / float(m) - 1) * a[k] * c[m - k]
     return c
 
 
@@ -198,7 +199,7 @@ def preemp(input, p):
     return lfilter([1., -p], 1, input)
 
 
-def arspecs(input_wav,order,Atal=False):
+def arspecs(input_wav, order, Atal=False):
     data = input_wav
     if Atal:
         ar = atal(data, order, 30)
@@ -207,8 +208,8 @@ def arspecs(input_wav,order,Atal=False):
         ar = []
         ars = arspec(data, order, 4096)
         for k, l in zip(ars[0], ars[1]):
-            ar.append(math.log(math.sqrt((k**2)+(l**2))))
-        for val in range(0,len(ar)):
+            ar.append(math.log(math.sqrt((k ** 2) + (l ** 2))))
+        for val in range(0, len(ar)):
             if ar[val] < 0.0:
                 ar[val] = np.nan
             elif ar[val] == 0.0:
@@ -219,41 +220,43 @@ def arspecs(input_wav,order,Atal=False):
         return ar[:30]
 
 
-def specPS(input_wav,pitch):
-        N = len(input_wav)
-        samps = N // pitch
-        if samps == 0:
-            samps = 1
-        frames = N // samps
-        data = input_wav[0:frames]
-        specs = periodogram(data,nfft=4096)
-        for i in range(1,int(samps)):
-            data = input_wav[frames*i:frames*(i+1)]
-            peri = periodogram(data,nfft=4096)
-            for sp in range(len(peri[0])):
-                specs[0][sp] += peri[0][sp]
-        for s in range(len(specs[0])):
-            specs[0][s] /= float(samps)
-        peri = []
-        for k, l in zip(specs[0], specs[1]):
-            m = math.sqrt((k ** 2) + (l ** 2))
-            if m > 0: m = math.log(m)
-            if m == 0: m = epsilon
-            elif m < 0: m = np.nan
-            peri.append(m)
-        # Filter the spectrum through the triangle filterbank
-        mspec = np.log10(peri)
-        # Use the DCT to 'compress' the coefficients (spectrum -> cepstrum domain)
-        ceps = dct(mspec, type=2, norm='ortho', axis=-1)
-        return ceps[:50]
+def specPS(input_wav, pitch):
+    N = len(input_wav)
+    samps = N // pitch
+    if samps == 0:
+        samps = 1
+    frames = N // samps
+    data = input_wav[0:frames]
+    specs = periodogram(data, nfft=4096)
+    for i in range(1, int(samps)):
+        data = input_wav[frames * i:frames * (i + 1)]
+        peri = periodogram(data, nfft=4096)
+        for sp in range(len(peri[0])):
+            specs[0][sp] += peri[0][sp]
+    for s in range(len(specs[0])):
+        specs[0][s] /= float(samps)
+    peri = []
+    for k, l in zip(specs[0], specs[1]):
+        m = math.sqrt((k ** 2) + (l ** 2))
+        if m > 0: m = math.log(m)
+        if m == 0:
+            m = epsilon
+        elif m < 0:
+            m = np.nan
+        peri.append(m)
+    # Filter the spectrum through the triangle filterbank
+    mspec = np.log10(peri)
+    # Use the DCT to 'compress' the coefficients (spectrum -> cepstrum domain)
+    ceps = dct(mspec, type=2, norm='ortho', axis=-1)
+    return ceps[:50]
 
 
-def build_single_feature_row(data, Atal):
-    lpcs = [8, 9, 10, 11, 12, 13, 14, 15, 16, 17]
+def build_single_feature_row(data: float32[:], Atal):
+    lpc_orders = np.array([8, 9, 10, 11, 12, 13, 14, 15, 16, 17])
     arr = []
     periodo = specPS(data, 50)
     arr.extend(periodo)
-    for j in lpcs:
+    for j in lpc_orders:
         if Atal:
             ars = arspecs(data, j, Atal=True)
         else:
@@ -280,24 +283,7 @@ def create_features(input_wav_filename, feature_filename, begin=None, end=None, 
         arr.extend(build_single_feature_row(X[i], Atal))
         arcep_mat.append(arr)
     np.savetxt(feature_filename, np.asarray(arcep_mat), delimiter=",", fmt="%s")
-    
+
     os.remove(wav)
 
     return arcep_mat
-
-
-if __name__ == "__main__":
-    # parse arguments
-    parser = argparse.ArgumentParser(description='Extract features for formants estimation.')
-    parser.add_argument('wav_file', default='', help="WAV audio filename (single vowel or an whole utternace)")
-    parser.add_argument('feature_file', default='', help="output feature text file")
-    parser.add_argument('--begin', help="beginning time in the WAV file", default=0.0, type=float)
-    parser.add_argument('--end', help="end time in the WAV file", default=-1.0, type=float)
-    args = parser.parse_args()
-
-    if args.begin > 0.0 or args.end > 0.0:
-        create_features(args.wav_file, args.feature_file, args.begin, args.end)
-    else:
-        create_features(args.wav_file, args.feature_file)
-
-
