@@ -6,3 +6,5 @@ output/*.*
 tracking_model.dat
 tracking_model.dat.gz
 temp/*.*
+
+.idea
