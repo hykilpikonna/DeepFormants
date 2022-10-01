@@ -1,30 +1,35 @@
 __author__ = 'shua'
 
-import argparse
-import numpy as np
-import wave
-import os
 import math
+from typing import Optional
 
+import numpy as np
+import tensorflow as tf
+from inaSpeechSegmenter import tf_mfcc
 from inaSpeechSegmenter.features import to_wav
-from numba import float32
+from inaSpeechSegmenter.sidekit_mfcc import read_wav
+from numba import int16, njit
+from scipy.fftpack import fft
 from scipy.fftpack.realtransforms import dct
-from scipy.signal import lfilter, hamming
-from scipy.fftpack import fft, ifft
-# from scikits.talkbox.linpred import lpc  # obsolete
+from scipy.signal import lfilter
+
 from helpers.conch_lpc import lpc
 from helpers.utilities import *
 
-epsilon = 0.0000000001
 prefac = .97
+
+
+def build_data_new(wav_path: str, begin: Optional[int], end: Optional[int]):
+    y, sr, _ = read_wav(wav_path, dtype=np.int16)
+    if begin is not None and end is not None:
+        return y[begin * sr:end * sr]
 
 
 def build_data(wav, begin=None, end=None):
     wav_in_file = wave.Wave_read(str(wav))
-    wav_in_num_samples = wav_in_file.getnframes()
     N = wav_in_file.getnframes()
     dstr = wav_in_file.readframes(N)
-    data = np.fromstring(dstr, np.int16)
+    data = np.fromstring(dstr, np.float32)
     if begin is not None and end is not None:
         # return data[begin*16000:end*16000] #numpy 1.11.0
         return data[np.int(begin * 16000):np.int(end * 16000)]  # numpy 1.14.0
@@ -35,7 +40,7 @@ def build_data(wav, begin=None, end=None):
     return X
 
 
-def periodogram(x, nfft=None, fs=1):
+def periodogram(x, nfft: int, fs=1):
     """Compute the periodogram of the given signal, with the given fft size.
 
     Parameters
@@ -55,15 +60,6 @@ def periodogram(x, nfft=None, fs=1):
         The psd estimate.
     fgrid : array-like
         Frequency grid over which the periodogram was estimated.
-
-    Examples
-    --------
-    Generate a signal with two sinusoids, and compute its periodogram:
-
-    >>> fs = 1000
-    >>> x = np.sin(2 * np.pi  * 0.1 * fs * np.linspace(0, 0.5, 0.5*fs))
-    >>> x += np.sin(2 * np.pi  * 0.2 * fs * np.linspace(0, 0.5, 0.5*fs))
-    >>> px, fx = periodogram(x, 512, fs)
 
     Notes
     -----
@@ -86,7 +82,7 @@ def periodogram(x, nfft=None, fs=1):
     if nfft < n:
         raise ValueError("nfft < signal size not supported yet")
 
-    pxx = np.abs(fft(x, nfft)) ** 2
+    pxx = np.abs(np.fft.fft(x, nfft)) ** 2
     if nfft % 2 == 0:
         pn = nfft // 2 + 1
     else:
@@ -213,54 +209,54 @@ def arspecs(input_wav, order, Atal=False):
             if ar[val] < 0.0:
                 ar[val] = np.nan
             elif ar[val] == 0.0:
-                ar[val] = epsilon
+                ar[val] = 0.0000000001
         mspec1 = np.log10(ar)
         # Use the DCT to 'compress' the coefficients (spectrum -> cepstrum domain)
         ar = dct(mspec1, type=2, norm='ortho', axis=-1)
         return ar[:30]
 
 
-def specPS(input_wav, pitch):
-    N = len(input_wav)
+def mfcc(sig: int16[:], pitch):
+    N = len(sig)
     samps = N // pitch
     if samps == 0:
         samps = 1
     frames = N // samps
-    data = input_wav[0:frames]
+    data = sig[0:frames]
+
     specs = periodogram(data, nfft=4096)
     for i in range(1, int(samps)):
-        data = input_wav[frames * i:frames * (i + 1)]
+        data = sig[frames * i:frames * (i + 1)]
         peri = periodogram(data, nfft=4096)
-        for sp in range(len(peri[0])):
-            specs[0][sp] += peri[0][sp]
-    for s in range(len(specs[0])):
-        specs[0][s] /= float(samps)
-    peri = []
-    for k, l in zip(specs[0], specs[1]):
-        m = math.sqrt((k ** 2) + (l ** 2))
-        if m > 0: m = math.log(m)
-        if m == 0:
-            m = epsilon
-        elif m < 0:
-            m = np.nan
-        peri.append(m)
+        specs[0] += peri[0]
+
+    specs[0] /= samps
+    with np.errstate(divide='ignore'):
+        peri = np.log(np.sqrt(specs[0] ** 2 + specs[1] ** 2))
+        peri[np.isneginf(peri)] = 0.0000000001
+
     # Filter the spectrum through the triangle filterbank
     mspec = np.log10(peri)
+
     # Use the DCT to 'compress' the coefficients (spectrum -> cepstrum domain)
+    ceps = dct(mspec, type=2, norm='ortho', axis=-1)
+
+    return ceps[:50]
+
+
+def mfcc_new(sig: int16[:], pitch):
+    loge, mspec = tf_mfcc.mel_spect(sig, nwin=0.256)
     ceps = dct(mspec, type=2, norm='ortho', axis=-1)
     return ceps[:50]
 
 
-def build_single_feature_row(data: float32[:], Atal):
+def build_single_feature_row(data: int16[:], atal: bool = False):
     lpc_orders = np.array([8, 9, 10, 11, 12, 13, 14, 15, 16, 17])
     arr = []
-    periodo = specPS(data, 50)
+    periodo = mfcc(data, 50)
     arr.extend(periodo)
     for j in lpc_orders:
-        if Atal:
-            ars = arspecs(data, j, Atal=True)
-        else:
-            ars = arspecs(data, j)
+        ars = arspecs(data, j, Atal=atal)
         arr.extend(ars)
     for i in range(len(arr)):
         if np.isnan(np.float(arr[i])):
@@ -270,7 +266,7 @@ def build_single_feature_row(data: float32[:], Atal):
 
 def create_features(input_wav_filename, feature_filename, begin=None, end=None, Atal=False):
     wav = to_wav(input_wav_filename)
-    X = build_data(wav, begin, end)
+    X = build_data_new(wav, begin, end)
     if begin is not None and end is not None:
         arr = [input_wav_filename]
         arr.extend(build_single_feature_row(X, Atal))
